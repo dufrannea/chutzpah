@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Xml;
+using Chutzpah.FileProcessors;
 using Chutzpah.FrameworkDefinitions;
 using Chutzpah.Models;
 using Chutzpah.Wrappers;
@@ -22,16 +23,18 @@ namespace Chutzpah.Coverage
         private readonly IFileSystemWrapper fileSystem;
         private readonly IJsonSerializer jsonSerializer;
         private readonly ILineCoverageMapper lineCoverageMapper;
+        private ISourceMapDiscoverer sourceMapDiscoverer;
 
         private List<string> includePatterns { get; set; }
         private List<string> excludePatterns { get; set; }
         private List<string> ignorePatterns { get; set; }
 
-        public BlanketJsCoverageEngine(IJsonSerializer jsonSerializer, IFileSystemWrapper fileSystem, ILineCoverageMapper lineCoverageMapper)
+        public BlanketJsCoverageEngine(IJsonSerializer jsonSerializer, IFileSystemWrapper fileSystem, ILineCoverageMapper lineCoverageMapper, ISourceMapDiscoverer sourceMapDiscoverer)
         {
             this.jsonSerializer = jsonSerializer;
             this.fileSystem = fileSystem;
             this.lineCoverageMapper = lineCoverageMapper;
+            this.sourceMapDiscoverer = sourceMapDiscoverer;
 
             includePatterns = new List<string>();
             excludePatterns = new List<string>();
@@ -179,7 +182,20 @@ namespace Chutzpah.Coverage
                 if (!generatedToReferencedFile.Contains(executedFilePath))
                 {
                     // This does not appear to be a compiled file so just created a referencedFile with the path
-                    referencedFiles.Add(new ReferencedFile { Path = executedFilePath });
+                    var referencedFile = new ReferencedFile { Path = executedFilePath };
+
+                    var sourceMapFilePath = this.sourceMapDiscoverer.FindSourceMap(executedFilePath);
+                    if (sourceMapFilePath != null)
+                    {
+                        // This is not the correct way to reconstruct the source 
+                        // path, it should be done in the same way as BatchCompilerService.GetOutputPath.
+                        // It is left as is for repro purposes.
+                        referencedFile.Path = executedFilePath.Replace(".js", ".ts");
+                        referencedFile.SourceMapFilePath = sourceMapFilePath;
+                        referencedFile.GeneratedFilePath = executedFilePath;
+                    }
+
+                    referencedFiles.Add(referencedFile);
                 }
                 else
                 {
